@@ -25,9 +25,6 @@
 - 8方向にスキャンして、相手→自分の石で挟める列を反転  
 - CPUは「反転枚数が最大の手」を選ぶ簡単ロジック（拡張歓迎）
 
-## デモ＆スクショ
-- GIF: `assets/demo.gif`  
-- 画像: `assets/screenshot.png`
 
 ## ライセンス
 MIT © 2025 shimarin
