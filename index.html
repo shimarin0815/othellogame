@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>オセロゲーム | Single-File SPA (All-in-One)</title>
+  <style>
+    /* ============ Theme & Reset ============ */
+    :root {
+      --bg: radial-gradient(1200px 800px at 10% 10%, #1d263b 0%, #0e1320 60%, #0a0f1a 100%);
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-strong: rgba(255, 255, 255, 0.12);
+      --border: rgba(255, 255, 255, 0.2);
+      --text: #eef2ff;
+      --muted: #a6b3d0;
+      --accent: #64f4ac;
+      --accent-2: #2ee59d;
+      --danger: #ff7b7b;
+      --warn: #ffde59;
+      --board-green: #17472a; /* modern deep green */
+      --board-line: rgba(255, 255, 255, 0.08);
+      --black: #141414;
+      --white: #f5f7fa;
+      --shadow-1: 0 10px 30px rgba(0,0,0,0.35);
+      --radius: 16px;
+    }
+    [data-theme="light"]{
+      --bg: radial-gradient(1200px 800px at 10% 10%, #e6f0ff 0%, #f4f7fb 60%, #f8fbff 100%);
+      --panel: rgba(0,0,0,0.04);
+      --panel-strong: rgba(0,0,0,0.08);
+      --border: rgba(0,0,0,0.12);
+      --text: #0b1220;
+      --muted: #536079;
+      --accent: #2b9e74;
+      --accent-2: #1f7e5c;
+      --board-green: #1a7c45;
+      --board-line: rgba(0,0,0,0.08);
+      --black: #171717;
+      --white: #fafafa;
+    }
+
+    /* ===== Skins (1) ===== */
+    body[data-skin="matcha"]{ --accent:#2bb673; --accent-2:#1e8a57; --board-green:#1e6a3f; }
+    body[data-skin="neon"]  { --accent:#7df9ff; --accent-2:#39ff14; --board-green:#0e3b26; }
+    body[data-skin="pastel"]{ --accent:#ffd1dc; --accent-2:#c3f0ca; --board-green:#2c6e49; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      letter-spacing: .01em;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    button, input { font: inherit; }
+
+    /* ============ Layout ============ */
+    .wrap { min-height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px clamp(16px, 4vw, 28px); }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo { width: 36px; height: 36px; border-radius: 50%; background:
+        radial-gradient(12px 12px at 12px 12px, var(--white), transparent 55%),
+        radial-gradient(12px 12px at 24px 24px, var(--black), transparent 55%),
+        linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 18px rgba(0,0,0,.25), inset 0 0 0 2px var(--panel-strong); }
+    .title { font-weight: 800; font-size: clamp(18px, 2.3vw, 22px); letter-spacing: .02em; }
+
+    .toolbar { display: flex; gap: 8px; align-items: center; background: var(--panel); padding: 8px; border-radius: 999px; border: 1px solid var(--border); backdrop-filter: blur(8px); box-shadow: var(--shadow-1); }
+    .pill { border-radius: 999px; padding: 8px 14px; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); cursor: pointer; }
+    .pill:hover { filter: brightness(1.1); }
+
+    main { display: grid; grid-template-columns: 1fr minmax(280px, 360px); gap: clamp(16px, 3vw, 32px); padding: 12px clamp(16px, 4vw, 28px) 28px; }
+    @media (max-width: 880px){ main { grid-template-columns: 1fr; } .side { order: 2; } }
+
+    /* ============ Board ============ */
+    .board-wrap { display: grid; place-items: center; }
+    .board { width: min(92vmin, 640px); aspect-ratio: 1 / 1; background: linear-gradient(180deg, #0f301c, var(--board-green)); border-radius: 20px; padding: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 0 0 2px #0b2215; position: relative; }
+    .grid { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); gap: 3px; width: 100%; height: 100%; border-radius: 14px; background: var(--board-line); padding: 3px; }
+    .cell { position: relative; background: #0b2a18; border-radius: 8px; border: 1px solid rgba(0,0,0,.25); outline: none; cursor: pointer; display: grid; place-items: center; transition: transform .06s ease; }
+    .cell:hover { transform: translateY(-1px); }
+    .cell[aria-disabled="true"] { cursor: default; }
+
+    /* (2) Ripple effect */
+    .ripple{ position:absolute; inset:0; pointer-events:none; }
+    .ripple::after{ content:""; position:absolute; left:50%; top:50%; width:6px; height:6px; border-radius:999px; border:2px solid rgba(255,255,255,.35); transform: translate(-50%,-50%) scale(1); animation: ripple .6s ease-out; }
+    @keyframes ripple{ to{ opacity:0; transform: translate(-50%,-50%) scale(18);} }
+
+    .hint { width: 30%; aspect-ratio: 1/1; border-radius: 999px; border: 2px dashed rgba(255,255,255,.25); box-shadow: inset 0 0 16px rgba(255,255,255,.2); filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); display: none; transition: border-color .2s; }
+    .cell.valid .hint { display: block; }
+    .cell.valid:hover .hint { border-color: var(--accent); }
+    .cell.valid .move-score { position: absolute; bottom: 8px; right: 8px; font-size: 12px; color: rgba(255,255,255,.8); }
+
+    .disc { width: 78%; aspect-ratio: 1/1; border-radius: 999px; box-shadow: inset 0 12px 24px rgba(255,255,255,.15), inset 0 -6px 16px rgba(0,0,0,.45), 0 10px 20px rgba(0,0,0,.35); transform: translateZ(0); transition: transform .2s ease, background-color .25s ease; }
+    .disc.black { background: radial-gradient(24px 24px at 30% 30%, #333, #000); border: 2px solid rgba(255,255,255,.05); }
+    .disc.white { background: radial-gradient(24px 24px at 30% 30%, #fff, #cfd8ea); border: 2px solid rgba(0,0,0,.08); }
+
+    .flipFX { animation: flipFX .35s ease; }
+    @keyframes flipFX { 0% { transform: scale(.88) rotateY(0deg); } 50%{ transform: scale(.92) rotateY(90deg); } 100%{ transform: scale(1) rotateY(0deg); } }
+
+    /* (5) Ghost preview */
+    .ghost { width:78%; aspect-ratio:1/1; border-radius:999px; opacity:.35; box-shadow: inset 0 8px 16px rgba(255,255,255,.15); pointer-events:none; }
+    .ghost.black{ background: radial-gradient(20px 20px at 30% 30%, #333, #000); }
+    .ghost.white{ background: radial-gradient(20px 20px at 30% 30%, #fff, #cfd8ea); }
+
+    /* (6) Heatmap via data-flips */
+    .cell.valid[data-flips="1"] .hint{ border-color:#7db6ff; }
+    .cell.valid[data-flips="2"] .hint{ border-color:#6df4b0; }
+    .cell.valid[data-flips="3"] .hint{ border-color:#a5f06b; }
+    .cell.valid[data-flips="4"] .hint{ border-color:#ffd166; }
+    .cell.valid[data-flips="5"] .hint,
+    .cell.valid[data-flips="6"] .hint{ border-color:#ff9f59; }
+    .cell.valid[data-flips="7"] .hint,
+    .cell.valid[data-flips="8"] .hint,
+    .cell.valid[data-flips="9"] .hint,
+    .cell.valid[data-flips="10"] .hint{ border-color:#ff7b7b; }
+
+    /* ============ Sidebar / Panels ============ */
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; backdrop-filter: blur(10px); box-shadow: var(--shadow-1); }
+    .side { display: grid; gap: 16px; align-content: start; }
+
+    .status { display: grid; gap: 10px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+    .turn { display: inline-grid; grid-auto-flow: column; align-items: center; gap: 10px; background: var(--panel-strong); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border); }
+    .dot { width: 14px; height: 14px; border-radius: 999px; display: inline-block; border: 2px solid rgba(0,0,0,.25); }
+    .dot.black { background: #0d0d0d; }
+    .dot.white { background: #fff; border-color: rgba(0,0,0,.15); }
+
+    .score { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .score .card { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 6px; text-align: center; }
+    .score .num { font-size: 28px; font-weight: 800; }
+
+    .controls { display: grid; gap: 8px; }
+    .btn { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); color: var(--text); background: linear-gradient(180deg, var(--panel-strong), transparent); cursor: pointer; box-shadow: var(--shadow-1); display: grid; grid-auto-flow: column; place-content: center; place-items: center; gap: 8px; transition: transform .06s ease, filter .2s ease; }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: linear-gradient(180deg, var(--accent), var(--accent-2)); color: #062214; border-color: transparent; font-weight: 800; }
+    .btn.warn { background: linear-gradient(180deg, #ffd166, #ffb703); color: #442a00; border-color: transparent; font-weight: 700; }
+
+    .notice { font-size: 14px; color: var(--muted); min-height: 20px; }
+
+    footer { padding: 10px 20px; color: var(--muted); text-align: center; font-size: 12px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div class="title">オセロゲーム</div>
+      </div>
+      <div class="toolbar" role="group" aria-label="ツールバー">
+        <button id="skinBtn" class="pill" aria-label="カラーパレット切替">🎨 テーマ</button>
+        <button id="themeToggle" class="pill" aria-label="テーマ切り替え (ライト/ダーク)">🌙/☀️</button>
+        <button id="helpBtn" class="pill" aria-label="遊び方">❓ 遊び方</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="board-wrap">
+        <div class="board panel" role="region" aria-label="オセロ盤">
+          <div id="grid" class="grid" role="grid" aria-label="8x8 マスのオセロ盤"></div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel status" aria-live="polite">
+          <div class="row">
+            <div class="turn">
+              <span>手番：</span>
+              <span id="turnDot" class="dot black" aria-hidden="true"></span>
+              <strong id="turnText">黒</strong>
+            </div>
+            <div class="turn" title="1手の制限時間">
+              ⏱ <strong id="tleft">30</strong>s
+            </div>
+            <label style="display:inline-grid; gap:6px; align-items:center; grid-auto-flow:column;">
+              <input type="checkbox" id="hintToggle" checked /> ヒント表示
+            </label>
+          </div>
+          <div class="score">
+            <div class="card" aria-label="黒のスコア">
+              <div>黒</div>
+              <div id="scoreBlack" class="num">2</div>
+            </div>
+            <div class="card" aria-label="白のスコア">
+              <div>白</div>
+              <div id="scoreWhite" class="num">2</div>
+            </div>
+          </div>
+          <div id="notice" class="notice"></div>
+        </section>
+
+        <section class="panel controls">
+          <button class="btn primary" id="newGame">新しいゲーム</button>
+          <div class="row">
+            <button class="btn" id="undo">⬅️ 1手戻す</button>
+            <button class="btn" id="redo">➡️ やり直し</button>
+          </div>
+          <button class="btn warn" id="reset">初期配置にリセット</button>
+          <div class="row">
+            <label style="display:inline-grid; gap:6px; grid-auto-flow:column; align-items:center;">
+              <input type="checkbox" id="cpuWhite" /> CPU（白を自動）
+            </label>
+            <button class="btn" id="shareBtn">📣 結果をコピー</button>
+          </div>
+          <details class="panel" style="padding:10px;">
+            <summary>キーボード操作</summary>
+            <ul style="margin:.5em 0 .2em 1.2em; line-height:1.7;">
+              <li>矢印キー：選択マスを移動</li>
+              <li>Enter / Space：石を置く</li>
+              <li>U：1手戻す、R：やり直し、N：新しいゲーム</li>
+            </ul>
+          </details>
+        </section>
+
+        <section class="panel" style="font-size:14px; line-height:1.7;">
+          <strong>目的：</strong> 楽しく遊びながら、先を読む力・観察力・判断力を鍛えること。
+          <br />
+          <strong>主な機能：</strong> 2人対戦／置ける場所ハイライト＋強さ色／ゴーストプレビュー／自動パス／スコア表示／Undo & Redo／キーボード操作／テーマ＆カラーパレット切替／効果音＆振動／ターンタイマー／CPU（白）／結果コピー／自動保存。
+        </section>
+      </aside>
+    </main>
+
+    <footer>
+      © <span id="year"></span> Othello SPA · シングルファイル / モダンUI
+    </footer>
+  </div>
+
+  <dialog id="howto">
+    <form method="dialog" class="panel" style="max-width:720px;">
+      <h3 style="margin-top:0">遊び方</h3>
+      <p>黒が先手です。相手の石をはさむように置くと、その間の石が自分の色にひっくり返ります。置ける場所は薄い丸で表示されます。どちらも置けなくなったらゲーム終了、石の多い方が勝ち！</p>
+      <p>キーボードでも操作できます（矢印キー＋Enter）。</p>
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="btn" value="ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    "use strict";
+    // ====== Constants & State ======
+    const SIZE = 8;
+    const EMPTY = 0, BLACK = 1, WHITE = -1;
+    const DIRS = [ [-1,-1],[-1,0],[-1,1], [0,-1], [0,1], [1,-1],[1,0],[1,1] ];
+
+    // (9) Turn timer
+    const TURN_SECONDS = 30;
+    let timerId = null, remain = TURN_SECONDS;
+
+    // Global state
+    let board = makeEmptyBoard();
+    let current = BLACK; // black starts
+    let history = []; // stack of {board, current}
+    let redoStack = [];
+    let showHints = true;
+    let skinIdx = 0;
+
+    // ====== DOM ======
+    const gridEl = document.getElementById('grid');
+    const turnDot = document.getElementById('turnDot');
+    const turnText = document.getElementById('turnText');
+    const scoreBlack = document.getElementById('scoreBlack');
+    const scoreWhite = document.getElementById('scoreWhite');
+    const notice = document.getElementById('notice');
+    const hintToggle = document.getElementById('hintToggle');
+    const newGameBtn = document.getElementById('newGame');
+    const resetBtn = document.getElementById('reset');
+    const undoBtn = document.getElementById('undo');
+    const redoBtn = document.getElementById('redo');
+    const themeToggle = document.getElementById('themeToggle');
+    const helpBtn = document.getElementById('helpBtn');
+    const howto = document.getElementById('howto');
+    const skinBtn = document.getElementById('skinBtn');
+    const cpuWhiteChk = document.getElementById('cpuWhite');
+    const tleftEl = document.getElementById('tleft');
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // ====== Helpers ======
+    function makeEmptyBoard(){ return Array.from({length: SIZE}, () => Array(SIZE).fill(EMPTY)); }
+    function cloneBoard(b){ return b.map(row => row.slice()); }
+    function inBounds(r,c){ return r>=0 && r<SIZE && c>=0 && c<SIZE; }
+    function opponent(p){ return -p; }
+    function colorName(p){ return p === BLACK ? '黒' : '白'; }
+
+    // Find flips if player p places at (r,c). Return array of [r,c] to flip.
+    function getFlipsForMove(b, r, c, p){
+      if (!inBounds(r,c) || b[r][c] !== EMPTY) return [];
+      let flips = [];
+      for (const [dr,dc] of DIRS){
+        let rr = r + dr, cc = c + dc;
+        let line = [];
+        if (!inBounds(rr,cc) || b[rr][cc] !== opponent(p)) continue; // need at least one opponent first
+        while(inBounds(rr,cc) && b[rr][cc] === opponent(p)){
+          line.push([rr,cc]); rr += dr; cc += dc;
+        }
+        if (inBounds(rr,cc) && b[rr][cc] === p && line.length){ flips.push(...line); }
+      }
+      return flips;
+    }
+
+    function getValidMoves(b, p){
+      const map = new Map();
+      for (let r=0; r<SIZE; r++){
+        for (let c=0; c<SIZE; c++){
+          if (b[r][c] !== EMPTY) continue;
+          const flips = getFlipsForMove(b, r, c, p);
+          if (flips.length) map.set(`${r},${c}`, flips);
+        }
+      }
+      return map;
+    }
+
+    function score(b){
+      let black=0, white=0;
+      for (let r=0; r<SIZE; r++) for(let c=0;c<SIZE;c++){
+        if (b[r][c]===BLACK) black++; else if (b[r][c]===WHITE) white++;
+      }
+      return {black, white};
+    }
+
+    function pushHistory(){ history.push({ board: cloneBoard(board), current }); }
+
+    // ====== SFX (4) ======
+    function sfx(freq=440, dur=0.06, type="sine", vol=0.03){
+      try{
+        const ctx = sfx.ctx ||= new (window.AudioContext||window.webkitAudioContext)();
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g).connect(ctx.destination);
+        o.start(); o.stop(ctx.currentTime + dur);
+      }catch(e){ /* audio blocked → ignore */ }
+    }
+
+    // ====== UI Rendering ======
+    function buildGrid(){
+      gridEl.innerHTML = '';
+      for (let r=0; r<SIZE; r++){
+        for (let c=0; c<SIZE; c++){
+          const cell = document.createElement('button');
+          cell.className = 'cell'; cell.setAttribute('role', 'gridcell');
+          cell.dataset.r = r; cell.dataset.c = c;
+          cell.addEventListener('click', onCellClick);
+          cell.addEventListener('keydown', onCellKey);
+          // (5) Ghost preview events
+          cell.addEventListener('mouseenter', ()=> showGhost(r,c));
+          cell.addEventListener('mouseleave', hideGhost);
+          const hint = document.createElement('div'); hint.className = 'hint'; cell.appendChild(hint);
+          const ms = document.createElement('div'); ms.className = 'move-score'; ms.hidden = true; cell.appendChild(ms);
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function renderBoard(options={}){
+      const {flashFlips=[]} = options;
+      const valids = getValidMoves(board, current);
+      for (const cell of gridEl.children){
+        const r = +cell.dataset.r, c = +cell.dataset.c;
+        // Clear dynamic children
+        cell.innerHTML = '';
+        const hint = document.createElement('div'); hint.className = 'hint'; cell.appendChild(hint);
+        const ms = document.createElement('div'); ms.className = 'move-score'; ms.hidden = true; cell.appendChild(ms);
+
+        const vkey = `${r},${c}`;
+        if (board[r][c] !== EMPTY){
+          const d = document.createElement('div');
+          d.className = 'disc ' + (board[r][c]===BLACK ? 'black' : 'white');
+          if (flashFlips.some(([rr,cc]) => rr===r && cc===c)) d.classList.add('flipFX');
+          cell.appendChild(d);
+          cell.setAttribute('aria-disabled','true'); cell.tabIndex = -1; cell.classList.remove('valid');
+          cell.setAttribute('aria-label', `${r+1}行${c+1}列：${board[r][c]===BLACK?'黒':'白'}`);
+        } else if (valids.has(vkey)){
+          cell.classList.add('valid');
+          if (showHints){
+            const flips = valids.get(vkey);
+            ms.hidden = false; ms.textContent = flips.length; cell.dataset.flips = String(Math.min(10, flips.length));
+          } else { cell.removeAttribute('data-flips'); }
+          cell.tabIndex = 0; cell.removeAttribute('aria-disabled');
+          cell.setAttribute('aria-label', `${r+1}行${c+1}列：置けます（${colorName(current)}）`);
+        } else {
+          cell.tabIndex = -1; cell.setAttribute('aria-disabled','true'); cell.classList.remove('valid'); cell.removeAttribute('data-flips');
+          cell.setAttribute('aria-label', `${r+1}行${c+1}列：置けません`);
+        }
+      }
+
+      // Status
+      const s = score(board);
+      scoreBlack.textContent = s.black; scoreWhite.textContent = s.white;
+      turnText.textContent = colorName(current);
+      turnDot.className = 'dot ' + (current===BLACK?'black':'white');
+
+      // Save
+      saveState();
+
+      // (8) CPU move if enabled
+      maybeCpuTurn();
+
+      // (9) Reset/start timer each (re)render of a human's turn
+      startTurnTimer(TURN_SECONDS);
+    }
+
+    // ====== Ghost preview (5) ======
+    function showGhost(r,c){
+      const valids = getValidMoves(board, current);
+      const key = `${r},${c}`; if (!valids.has(key)) return;
+      const flips = valids.get(key);
+      for (const [fr,fc] of flips){
+        const target = [...gridEl.children].find(el=>+el.dataset.r===fr && +el.dataset.c===fc);
+        if (!target) continue; const g = document.createElement('div');
+        g.className = 'ghost ' + (current===BLACK? 'black':'white'); target.appendChild(g);
+      }
+      // preview on hovered cell itself
+      const self = [...gridEl.children].find(el=>+el.dataset.r===r && +el.dataset.c===c);
+      if (self){ const gp = document.createElement('div'); gp.className = 'ghost ' + (current===BLACK? 'black':'white'); self.appendChild(gp); }
+    }
+    function hideGhost(){ document.querySelectorAll('.ghost').forEach(n=>n.remove()); }
+
+    // ====== Game Flow ======
+    function setupInitial(){
+      board = makeEmptyBoard();
+      const m = SIZE/2; // 4
+      board[m-1][m-1] = WHITE; board[m-1][m] = BLACK; board[m][m-1] = BLACK; board[m][m] = WHITE;
+      current = BLACK; history = []; redoStack = []; notice.textContent = '';
+      renderBoard();
+    }
+
+    function onCellClick(e){ const cell = e.currentTarget; tryPlace(+cell.dataset.r, +cell.dataset.c); }
+
+    function onCellKey(e){
+      const cell = e.currentTarget; const r = +cell.dataset.r, c = +cell.dataset.c;
+      if (['Enter',' '].includes(e.key)){ e.preventDefault(); tryPlace(r,c); return; }
+      let nr=r, nc=c; // Arrow navigation
+      if (e.key==='ArrowUp') nr = Math.max(0, r-1);
+      else if (e.key==='ArrowDown') nr = Math.min(SIZE-1, r+1);
+      else if (e.key==='ArrowLeft') nc = Math.max(0, c-1);
+      else if (e.key==='ArrowRight') nc = Math.min(SIZE-1, c+1);
+      else if (e.key==='u' || e.key==='U'){ undo(); return; }
+      else if (e.key==='r' || e.key==='R'){ redo(); return; }
+      else if (e.key==='n' || e.key==='N'){ newGame(); return; }
+      const next = [...gridEl.children].find(el => +el.dataset.r===nr && +el.dataset.c===nc);
+      if (next) next.focus();
+    }
+
+    function tryPlace(r,c,opts={}){
+      // If CPU's turn, ignore user clicks (but allow internal CPU moves)
+const { byCpu = false } = opts;
+if (current===WHITE && cpuWhiteChk.checked && !byCpu) return;
+      const valids = getValidMoves(board, current); const key = `${r},${c}`; if (!valids.has(key)) return;
+
+      pushHistory(); redoStack = [];
+
+      const cell = [...gridEl.children].find(el=>+el.dataset.r===r && +el.dataset.c===c);
+      const rip = document.createElement('div'); rip.className='ripple'; cell.appendChild(rip); setTimeout(()=>rip.remove(), 600);
+
+      const flips = valids.get(key);
+      board[r][c] = current;
+      for (const [fr,fc] of flips){ board[fr][fc] = current; }
+      if (navigator.vibrate) navigator.vibrate(40); // (3)
+      sfx(520, .05, 'triangle', .035); // (4)
+
+      renderBoard({ flashFlips: [[r,c], ...flips] });
+
+      const nextP = opponent(current);
+      const oppMoves = getValidMoves(board, nextP);
+      if (oppMoves.size === 0){
+        const myMoves = getValidMoves(board, current);
+        if (myMoves.size === 0){ endGame(); return; }
+        else { notice.textContent = `${colorName(nextP)}は置ける場所がないためパス。${colorName(current)}のままです。`; renderBoard(); return; }
+      } else {
+        current = nextP; notice.textContent = '';
+        renderBoard();
+      }
+    }
+
+    function endGame(){
+      stopTurnTimer();
+      const s = score(board);
+      let msg = `ゲーム終了：黒 ${s.black} - ${s.white} 白。`;
+      if (s.black > s.white) msg += ' 勝者は「黒」！';
+      else if (s.white > s.black) msg += ' 勝者は「白」！';
+      else msg += ' 引き分け！';
+      notice.textContent = msg; confettiEmoji(); // (7)
+      for (const cell of gridEl.children){ cell.tabIndex = -1; cell.setAttribute('aria-disabled','true'); cell.classList.remove('valid'); }
+    }
+
+    // ====== Actions ======
+    function newGame(){ setupInitial(); }
+    function reset(){ pushHistory(); redoStack = []; setupInitial(); }
+    function undo(){ if (!history.length) return; redoStack.push({ board: cloneBoard(board), current }); const prev = history.pop(); board = cloneBoard(prev.board); current = prev.current; notice.textContent = '1手戻しました。'; renderBoard(); }
+    function redo(){ if (!redoStack.length) return; history.push({ board: cloneBoard(board), current }); const next = redoStack.pop(); board = cloneBoard(next.board); current = next.current; notice.textContent = 'やり直しました。'; renderBoard(); }
+
+    // ====== CPU (8) ======
+    function bestMoveGreedy(b, p){
+      const valids = getValidMoves(b, p); if (!valids.size) return null;
+      let best=null, bestScore=-1; for (const [key, flips] of valids.entries()){ if (flips.length > bestScore){ bestScore = flips.length; best = key; } }
+      return best; // "r,c"
+    }
+    function maybeCpuTurn(){
+      if (!cpuWhiteChk.checked) return; if (current !== WHITE) return; // only CPU for white
+      const m = bestMoveGreedy(board, WHITE);
+      if (!m){ notice.textContent = 'CPUは置ける場所がありません（パス）'; // current stays if human has move
+        const humanMoves = getValidMoves(board, BLACK); if (!humanMoves.size){ endGame(); } return; }
+      stopTurnTimer(); // CPU acts immediately, no timer countdown for CPU
+      setTimeout(()=> { const [r,c] = m.split(',').map(Number); tryPlace(r,c,{byCpu:true}); }, 350);
+    }
+
+    // ====== Turn Timer (9) ======
+    function startTurnTimer(sec=TURN_SECONDS){
+      stopTurnTimer(); remain = sec; tleftEl.textContent = remain;
+      // only for human turns (if CPU white and it's white's turn → no timer)
+      if (current===WHITE && cpuWhiteChk.checked) { tleftEl.textContent = 'CPU'; return; }
+      timerId = setInterval(()=>{
+        tleftEl.textContent = --remain;
+        if (remain <= 0){
+          stopTurnTimer(); // pass turn on timeout
+          notice.textContent = '時間切れ、パス！';
+          const myMoves = getValidMoves(board, current);
+          if (myMoves.size){ current = opponent(current); renderBoard(); }
+          else { // no moves even if time up
+            const oppMoves = getValidMoves(board, opponent(current));
+            if (!oppMoves.size) endGame(); else { current = opponent(current); renderBoard(); }
+          }
+        }
+      }, 1000);
+    }
+    function stopTurnTimer(){ clearInterval(timerId); timerId = null; }
+
+    // ====== Persistence & Theme & Skin (1) ======
+    const SAVE_KEY = 'othello_spa_state_v2';
+    function saveState(){
+      try{
+        const data = { board, current, showHints, theme: document.body.hasAttribute('data-theme') ? 'light' : 'dark', skin: document.body.dataset.skin||'default', cpuWhite: !!cpuWhiteChk.checked };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      }catch(e){ /* ignore */ }
+    }
+    function loadState(){
+      try{
+        const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
+        const data = JSON.parse(raw); if (!Array.isArray(data.board)) return false;
+        board = data.board; current = data.current ?? BLACK; showHints = !!data.showHints;
+        hintToggle.checked = showHints;
+        if (data.theme==='light') document.body.setAttribute('data-theme','light'); else document.body.removeAttribute('data-theme');
+        if (data.skin && data.skin!=='default') document.body.dataset.skin = data.skin;
+        cpuWhiteChk.checked = !!data.cpuWhite;
+        renderBoard(); return true;
+      }catch(e){ return false; }
+    }
+
+    function applyThemeFromStorage(){ const t = localStorage.getItem('theme') || 'dark'; if (t==='light') document.body.setAttribute('data-theme','light'); else document.body.removeAttribute('data-theme'); }
+
+    // ====== Share (10) ======
+    function copyResult(){ const s = score(board); const msg = `【オセロ結果】黒:${s.black} 白:${s.white}｜#Othello #WebGame`; navigator.clipboard?.writeText(msg); notice.textContent = '結果テキストをコピーしました！'; }
+
+    // ====== Confetti (7) ======
+    function confettiEmoji(count=40){ const area = document.body; for(let i=0;i<count;i++){ const s = document.createElement('div'); s.textContent = ["🎉","✨","🎊","💫"][i%4]; s.style.cssText = `position:fixed; left:${Math.random()*100}vw; top:-10vh; font-size:${12+Math.random()*24}px; transform:translateY(0); transition:transform ${1+Math.random()*1.6}s linear; z-index:9999`; area.appendChild(s); requestAnimationFrame(()=> s.style.transform = `translateY(${120+Math.random()*80}vh) rotate(${Math.random()*360}deg)`); setTimeout(()=>s.remove(), 2200);} }
+
+    // ====== Events ======
+    hintToggle.addEventListener('change', () => { showHints = hintToggle.checked; renderBoard(); });
+    newGameBtn.addEventListener('click', newGame);
+    resetBtn.addEventListener('click', reset);
+    undoBtn.addEventListener('click', undo);
+    redoBtn.addEventListener('click', redo);
+    themeToggle.addEventListener('click', () => {
+      const isLight = document.body.hasAttribute('data-theme'); if (isLight) document.body.removeAttribute('data-theme'); else document.body.setAttribute('data-theme','light'); localStorage.setItem('theme', document.body.hasAttribute('data-theme') ? 'light' : 'dark');
+      saveState();
+    });
+    helpBtn.addEventListener('click', () => howto.showModal());
+    skinBtn.addEventListener('click', ()=>{
+      const skins = ['default','matcha','neon','pastel'];
+      const cur = document.body.dataset.skin || 'default';
+      const idx = skins.indexOf(cur); const next = skins[(idx+1)%skins.length];
+      if (next==='default') delete document.body.dataset.skin; else document.body.dataset.skin = next; saveState();
+      notice.textContent = `テーマ：${next}`;
+    });
+    cpuWhiteChk.addEventListener('change', ()=>{ saveState(); renderBoard(); });
+    document.getElementById('shareBtn').addEventListener('click', copyResult);
+
+    // ====== Init ======
+    applyThemeFromStorage();
+    buildGrid();
+    if (!loadState()) setupInitial(); else startTurnTimer(TURN_SECONDS);
+  </script>
+</body>
+</html>
